@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-#import h5py
+import h5py
 import math
 import numpy as np
 import sys
@@ -14,7 +14,7 @@ if sys.version_info[0] < 3: sys.exit()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('input', nargs='+', action='store', type=str, help='input file name')
-parser.add_argument('-o', '--output', action='store', type=str, help='output file name', required=True)
+parser.add_argument('-o', '--output', action='store', type=str, help='output directory name', required=True)
 #parser.add_argument('--format', action='store', default='Delphes', choices=("Delphes", "NanoAOD"), help='name of the main tree')
 parser.add_argument('--data', action='store_true', default=False, help='Flag to set real data')
 parser.add_argument('-n', '--nevent', action='store', type=int, default=-1, help='number of events to preprocess')
@@ -138,13 +138,33 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
     jetss_p4 = [tree["Jet"][x].array() for x in ("Jet.PT", "Jet.Eta", "Jet.Phi", "Jet.Mass")]
     jetss_feats = [tree["Jet"][x].array() for x in jetVarNames]
 
-    g = buildGraph(jetss_p4[1], jetss_p4[2])
+    nEventPassed = nEvent ## FIXME: to be changed to cound number of events after cuts
+
+    edges = buildGraph(jetss_p4[1], jetss_p4[2])
     if args.debug:
-        print("@@@ Debug: First graphs built:", g[0])
+        print("@@@ Debug: First graphs built:", edges[0])
         print("           eta:", jetss_p4[1][0])
         print("           phi:", jetss_p4[2][0])
 
-    nEventProcessed += len(g)
+    outFileName = args.output+'/'+srcFileName.rsplit('/',1)[-1].rsplit('.',1)[-1]+'.h5'
+    fout = h5py.File(outFileName, mode='w', libver='latest')
+    dtype = h5py.special_dtype(vlen=np.dtype('float64'))
+    itype = h5py.special_dtype(vlen=np.dtype('uint32'))
+    out = fout.create_group('graph')
+    out_pos  = out.create_group('pos')
+    out_feat = out.create_group('feat')
+    out_edge = out.create_group('edge')
+
+    out_pos.create_dataset('pos', (nEventPassed,), dtype=dtype)
+    out_pos['pos'][...] = jets_eta_phi
+    out_pos.create_dataset('feat', (nEventPassed,), dtype=dtype)
+    out_pos['feat'][...] = jets_features
+    out_pos.create_dataset('edge', (nEventPassed,), dtype=itype)
+    out_pos['edge'][...] = edges
+
+    fout.close()
+
+    nEventProcessed += nEvent
     print("%d/%d" % (nEventProcessed, nEventTotal), end="\r")
 print("done %d/%d" % (nEventProcessed, nEventTotal))
 
