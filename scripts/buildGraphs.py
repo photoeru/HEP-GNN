@@ -19,10 +19,11 @@ parser.add_argument('-o', '--output', action='store', type=str, help='output dir
 parser.add_argument('--data', action='store_true', default=False, help='Flag to set real data')
 parser.add_argument('-n', '--nevent', action='store', type=int, default=-1, help='number of events to preprocess')
 parser.add_argument('--nfiles', action='store', type=int, default=0, help='number of output files')
+parser.add_argument('-c', '--chunk', action='store', type=int, default=1024, help='chunk size')
 parser.add_argument('--compress', action='store', choices=('gzip', 'lzf', 'none'), default='lzf', help='compression algorithm')
 parser.add_argument('-s', '--split', action='store_true', default=False, help='split output file')
 parser.add_argument('-d', '--debug', action='store_true', default=False, help='debugging')
-parser.add_argument('--precision', action='store', choices=(8,16,32,64), default=32, help='Precision')
+parser.add_argument('--precision', action='store', type=int, choices=(8,16,32,64), default=32, help='Precision')
 args = parser.parse_args()
 
 if not args.output.endswith('.h5'): outPrefix, outSuffix = args.output+'/data', '.h5'
@@ -93,7 +94,7 @@ def buildGraph(jetss_eta, jetss_phi):
     prange = numba.prange
     maxDR2 = 1.2*1.2 ## maximum deltaR value to connect two jets
 
-    nodes1, nodes2= [[0]], [[0]]
+    nodes1, nodes2 = [[0]], [[0]]
     nodes1.pop()
     nodes2.pop()
     nEvent = len(jetss_eta)
@@ -141,55 +142,100 @@ print("@@@ Start processing...")
 outFileNames = []
 nEventProcessed = 0
 nEventToGo = nEventOutFile
-out_labels, out_weights, out_image = None, None, None
+
+featNames = ("Jet.PT", "Jet.Mass", "Jet.BTag")
+nFeats = len(featNames)
+dtype = h5py.special_dtype(vlen=np.dtype('float64'))
+itype = h5py.special_dtype(vlen=np.dtype('uint32'))
+
 for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
     if args.debug: print("@@@ Open file", srcFileName)
     ## Open data files
     fin = uproot.open(srcFileName)
     tree = fin[treeName]
-    nEvent = len(tree)
 
     ## Load objects
-    weights = np.ones(nEvent) if weightName else tree[weightName]
-    jetss_eta = tree["Jet"]["Jet.Eta"].array()
-    jetss_phi = tree["Jet"]["Jet.Phi"].array()
-    featNames = ("Jet.PT", "Jet.Mass", "Jet.BTag")
-    nFeats = len(featNames)
-    jetss_feats = [tree["Jet"][x].array() for x in featNames]
+    src_weights = np.ones(nEvent0) if weightName else tree[weightName]
+    src_jets_eta = tree["Jet"]["Jet.Eta"].array()
+    src_jets_phi = tree["Jet"]["Jet.Phi"].array()
+    src_jets_feats = [tree["Jet"][featName].array() for featName in featNames]
 
-    nEventPassed = nEvent ## FIXME: to be changed to cound number of events after cuts
+    ## Analyze events in this file
+    nEventPassed = nEvent0 ## FIXME: to be changed to cound number of events after cuts
 
-    nodes1, nodes2 = buildGraph(jetss_eta, jetss_phi)
+    jets_node1, jets_node2 = buildGraph(src_jets_eta, src_jets_phi)
     if args.debug:
-        print("@@@ Debug: First graphs built:", nodes1[0], nodes2[0])
-        print("           eta:", jetss_eta[0])
-        print("           phi:", jetss_phi[0])
+        print("@@@ Debug: First graphs built:", jets_node1[0], jets_node2[0])
+        print("           eta:", src_jets_eta[0])
+        print("           phi:", src_jets_phi[0])
 
-    outFileName = args.output+'/'+srcFileName.rsplit('/',1)[-1].rsplit('.',1)[-1]+'.h5'
-    fout = h5py.File(outFileName, mode='w', libver='latest')
+    begin, end = 0, min(nEventToGo, nEvent0)
+    while begin < nEvent0:
+        ### First check to prepare output array
+        if nEventToGo == nEventOutFile: ## Initializing output file
+            ## Build placeholder for the output
+            out_weights = np.array([], dtype=np.dtype('float64'))
+            out_jets_eta = np.array([], dtype=dtype)
+            out_jets_phi = np.array([], dtype=dtype)
+            out_jets_feats = [np.array([], dtype=dtype) for featName in featNames]
+            out_jets_node1 = np.array([], dtype=itype)
+            out_jets_node2 = np.array([], dtype=itype)
+        ###
 
-    dtype = h5py.special_dtype(vlen=np.dtype('float64'))
-    itype = h5py.special_dtype(vlen=np.dtype('uint32'))
+        ## Do the processing
+        nEventToGo -= (end-begin)
+        nEventProcessed += (end-begin)
 
-    out = fout.create_group('jets')
+        out_weights = np.concatenate([out_weights, src_weights[begin:end]])
+        out_jets_eta = np.concatenate([out_jets_eta, np.array([list(x) for x in src_jets_eta[begin:end]], dtype=dtype)])
+        out_jets_phi = np.concatenate([out_jets_phi, np.array([list(x) for x in src_jets_phi[begin:end]], dtype=dtype)])
+        for i in range(nFeats):
+            out_jets_feats[i] = np.concatenate([out_jets_feats[i], 
+                                                np.array([list(x) for x in src_jets_feats[i][begin:end]], dtype=dtype)])
+        out_jets_node1 = np.concatenate([out_jets_node1, np.array([list(x) for x in jets_node1[begin:end]], dtype=itype)])
+        out_jets_node2 = np.concatenate([out_jets_node2, np.array([list(x) for x in jets_node2[begin:end]], dtype=itype)])
 
-    out.create_dataset('eta', (nEventPassed,), dtype=dtype)
-    out.create_dataset('phi', (nEventPassed,), dtype=dtype)
-    out['eta'][...] = np.array([list(x) for x in jetss_eta], dtype=dtype)
-    out['phi'][...] = np.array([list(x) for x in jetss_phi], dtype=dtype)
-    for i, x in enumerate(featNames):
-        shortName = x.replace('Jet.', '')
-        out.create_dataset(shortName, (nEventPassed,), dtype=dtype)
-        out[shortName][...] = np.array([list(y) for y in jetss_feats[i]], dtype=dtype)
+        begin, end = end, min(nEventToGo, nEvent0)
 
-    out.create_dataset('nodes1', (nEventPassed,), dtype=itype)
-    out.create_dataset('nodes2', (nEventPassed,), dtype=itype)
-    out['nodes1'][...] = np.array([list(x) for x in nodes1], dtype=itype)
-    out['nodes2'][...] = np.array([list(x) for x in nodes2], dtype=itype)
+        if nEventToGo == 0 or nEventProcessed == nEventTotal: ## Flush output and continue
+            nEventToGo = nEventOutFile
+            end = min(begin+nEventToGo, nEvent0)
 
-    fout.close()
+            iOutFile = len(outFileNames)+1
+            outFileName = outPrefix + (("_%d" % iOutFile) if args.split else "") + ".h5"
+            outFileNames.append(outFileName)
+            if args.debug: print("Writing output file %s..." % outFileName, end='')
 
-    nEventProcessed += nEvent
-    print("%d/%d" % (nEventProcessed, nEventTotal), end="\r")
+            chunkSize = min(args.chunk, out_weights.shape[0])
+            with h5py.File(outFileName, 'w', libver='latest', swmr=True) as outFile:
+                nEventToSave = len(out_weights)
+                out = outFile.create_group('jets')
+
+                out.create_dataset('weights', data=out_weights, chunks=(chunkSize,), dtype='f4')
+
+                out.create_dataset('eta', (nEventToSave,), dtype=dtype)
+                out.create_dataset('phi', (nEventToSave,), dtype=dtype)
+                out['eta'][...] = out_jets_eta
+                out['phi'][...] = out_jets_phi
+
+                for i, featName in enumerate(featNames):
+                    shortName = featName.replace('Jet.', '')
+                    out.create_dataset(shortName, (nEventToSave,), dtype=dtype)
+                    out[shortName][...] = out_jets_feats[i]
+
+                out.create_dataset('nodes1', (nEventToSave,), dtype=itype)
+                out.create_dataset('nodes2', (nEventToSave,), dtype=itype)
+                out['nodes1'][...] = out_jets_node1
+                out['nodes2'][...] = out_jets_node2
+
+                if args.debug: print("  done")
+
+            with h5py.File(outFileName, 'r', libver='latest', swmr=True) as outFile:
+                print(("  created %s (%d/%d)" % (outFileName, iOutFile, args.nfiles)), end='')
+                print("  keys=", list(outFile.keys()), end='')
+                print("  shape=", outFile['jets']['eta'].shape)
+
+        print("%d/%d" % (nEventProcessed, nEventTotal), end="\r")
+
 print("done %d/%d" % (nEventProcessed, nEventTotal))
 
