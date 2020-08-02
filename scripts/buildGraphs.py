@@ -18,7 +18,6 @@ parser.add_argument('-o', '--output', action='store', type=str, help='output dir
 #parser.add_argument('--format', action='store', default='Delphes', choices=("Delphes", "NanoAOD"), help='name of the main tree')
 parser.add_argument('--data', action='store_true', default=False, help='Flag to set real data')
 parser.add_argument('-n', '--nevent', action='store', type=int, default=-1, help='number of events to preprocess')
-parser.add_argument('--nfiles', action='store', type=int, default=0, help='number of output files')
 parser.add_argument('-c', '--chunk', action='store', type=int, default=1024, help='chunk size')
 parser.add_argument('--compress', action='store', choices=('gzip', 'lzf', 'none'), default='lzf', help='compression algorithm')
 parser.add_argument('-s', '--split', action='store_true', default=False, help='split output file')
@@ -43,21 +42,13 @@ if not args.data:
     #if args.format == "Delphes" else "weights"
 
 ## Logic for the arguments regarding on splitting
-##   split off: we will simply ignore nfiles parameter => reset nfiles=1
+##   split off:
 ##     nevent == -1: process all events store in one file
 ##     nevent != -1: process portion of events, store in one file
 ##   split on:
-##     nevent == -1, nfiles == 1: same as the one without splitting
-##     nevent != -1, nfiles == 1: same as the one without splitting
-##     nevent == -1, nfiles != 1: process all events, split into nfiles
-##     nevent != -1, nfiles != 1: split files, limit total number of events to be nevent
-##     nevent != -1, nfiles == 0: split files by nevents for each files
-if not args.split or args.nfiles == 1:
-    ## Just confirm the options for no-splitting case
-    args.split = False
-    args.nfiles = 1
-elif args.split and args.nevent > 0:
-    args.nfiles = 0
+##     nevent == -1: process all events, split into nfiles
+##     nevent != -1: split files, limit total number of events to be nevent
+##     nevent != -1: split files by nevents for each files
 
 ## Find root files with corresponding trees
 print("@@@ Checking input files... (total %d files)" % (len(args.input)))
@@ -82,15 +73,11 @@ for x in args.input:
         nEvent0 = len(tree)
         nEvent0s.append(nEvent0)
         nEventTotal += nEvent0
-if args.nfiles > 0:
-    nEventOutFile = int(ceil(nEventTotal/args.nfiles))
-else:
-    args.nfiles = int(ceil(nEventTotal/args.nevent))
-    nEventOutFile = min(nEventTotal, args.nevent)
-print("@@@ Total %d events to process, store into %d files (%d events per file)" % (nEventTotal, args.nfiles, nEventOutFile))
+nEventOutFile = min(nEventTotal, args.nevent) if args.split else nEventTotal
+print("@@@ Total %d events to process, store %d events per file" % (nEventTotal, nEventOutFile))
 
-@numba.njit(nogil=True, fastmath=True)
-def buildGraph(jetss_eta, jetss_phi):
+@numba.njit(nogil=True, fastmath=True, parallel=True)
+def buildGraph(jetss_pt, jetss_eta, jetss_phi):
     prange = numba.prange
     maxDR2 = 1.2*1.2 ## maximum deltaR value to connect two jets
 
@@ -98,9 +85,10 @@ def buildGraph(jetss_eta, jetss_phi):
     nodes1.pop()
     nodes2.pop()
     nEvent = len(jetss_eta)
-    for ievt in range(nEvent):
-        jets_eta = jetss_eta[ievt]
-        jets_phi = jetss_phi[ievt]
+    for ievt in prange(nEvent):
+        selJets = (jetss_pt[ievt] > 30) & (np.fabs(jetss_eta[ievt]) < 2.4)
+        jets_eta = jetss_eta[ievt][selJets]
+        jets_phi = jetss_phi[ievt][selJets]
         nJet = len(jets_eta)
 
         inodes1, inodes2 = [], []
@@ -121,21 +109,31 @@ def buildGraph(jetss_eta, jetss_phi):
 
     return nodes1, nodes2
 
-@numba.jit(nogil=True, fastmath=True)
-def selectBaselineCuts(fjetss_pt, fjetss_eta, fjetss_mass,
-                       jetss_pt, jetss_eta, jetss_btag):
-    prange = numba.prange
-
-    cut_minFJetSumMass = 500 # GeV
+@numba.njit(nogil=True, fastmath=True, parallel=True)
+def selectBaselineCuts(src_fjets_pt, src_fjets_eta, src_fjets_mass,
+                       src_jets_pt, src_jets_eta, src_jets_btag):
     cut_minNBJets = 1
-    cut_minHT = 1500 ## GeV
     cut_minNJet = 4
 
-    fatjet_pt_min = 30*units.GeV
-    jet_pt_min = 30*units.GeV
-    jet_eta_max = 2.4
+    nEvent = int(len(src_fjets_pt))
+    selEvents = []
 
-    return True
+    prange = numba.prange
+    for ievt in prange(nEvent):
+        selJets = (src_jets_pt[ievt] > 30) & (np.fabs(src_jets_eta[ievt]) < 2.4)
+        ht = (src_jets_pt[ievt][selJets]).sum()
+        if ht < 1500: continue ## require HT >= 1500
+
+        selBJets = (src_jets_btag[ievt][selJets] > 0.5)
+        if len(selBJets) < 1: continue ## require nBJets >= 1
+
+        selFjets = (src_fjets_pt[ievt] > 30) & (np.fabs(src_fjets_eta[ievt]) < 2.4)
+        sumFjetsMass = (src_fjets_mass[ievt][selFjets]).sum()
+        if sumFjetsMass < 500: continue ## require sum(FatJetMass) >= 500
+
+        selEvents.append(ievt)
+
+    return np.array(selEvents, dtype=np.dtype('int64'))
 
 print("@@@ Start processing...")
 
@@ -160,10 +158,22 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
     src_jets_phi = tree["Jet"]["Jet.Phi"].array()
     src_jets_feats = [tree["Jet"][featName].array() for featName in featNames]
 
-    ## Analyze events in this file
-    nEventPassed = len(src_weights) ## FIXME: to be changed to cound number of events after cuts
+    ## Apply event selection in this file
+    src_fjets_pt   = tree["FatJet"]["FatJet.PT"].array()
+    src_fjets_eta  = tree["FatJet"]["FatJet.Eta"].array()
+    src_fjets_mass = tree["FatJet"]["FatJet.Mass"].array()
+    src_jets_pt   = tree["Jet"]["Jet.PT"].array()
+    src_jets_btag = tree["Jet"]["Jet.Mass"].array()
+    selEvent = selectBaselineCuts(src_fjets_pt, src_fjets_eta, src_fjets_mass,
+                                  src_jets_pt, src_jets_eta, src_jets_btag)
 
-    jets_node1, jets_node2 = buildGraph(src_jets_eta, src_jets_phi)
+    nEventPassed = len(selEvent) ## FIXME: to be changed to cound number of events after cuts
+    src_jets_pt = src_jets_pt[selEvent]
+    src_jets_eta = src_jets_eta[selEvent]
+    src_jets_phi = src_jets_phi[selEvent]
+
+    ## Build graphs
+    jets_node1, jets_node2 = buildGraph(src_jets_pt, src_jets_eta, src_jets_phi)
     if args.debug:
         print("@@@ Debug: First graphs built:", jets_node1[0], jets_node2[0])
         print("           eta:", src_jets_eta[0])
@@ -209,31 +219,32 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
             chunkSize = min(args.chunk, out_weights.shape[0])
             with h5py.File(outFileName, 'w', libver='latest', swmr=True) as outFile:
                 nEventToSave = len(out_weights)
-                out = outFile.create_group('event')
+                out_events = outFile.create_group('events')
+                out_events.create_dataset('weights', data=out_weights, chunks=(chunkSize,), dtype='f4')
 
-                out.create_dataset('weights', data=out_weights, chunks=(chunkSize,), dtype='f4')
-
-                out.create_dataset('eta', (nEventToSave,), dtype=dtype)
-                out.create_dataset('phi', (nEventToSave,), dtype=dtype)
-                out['eta'][...] = out_jets_eta
-                out['phi'][...] = out_jets_phi
+                out_jets = outFile.create_group('jets')
+                out_jets.create_dataset('eta', (nEventToSave,), dtype=dtype)
+                out_jets.create_dataset('phi', (nEventToSave,), dtype=dtype)
+                out_jets['eta'][...] = out_jets_eta
+                out_jets['phi'][...] = out_jets_phi
 
                 for i, featName in enumerate(featNames):
                     shortName = featName.replace('Jet.', '')
-                    out.create_dataset(shortName, (nEventToSave,), dtype=dtype)
-                    out[shortName][...] = out_jets_feats[i]
+                    out_jets.create_dataset(shortName, (nEventToSave,), dtype=dtype)
+                    out_jets[shortName][...] = out_jets_feats[i]
 
-                out.create_dataset('nodes1', (nEventToSave,), dtype=itype)
-                out.create_dataset('nodes2', (nEventToSave,), dtype=itype)
-                out['nodes1'][...] = out_jets_node1
-                out['nodes2'][...] = out_jets_node2
+                out_graphs = outFile.create_group('graphs')
+                out_graphs.create_dataset('nodes1', (nEventToSave,), dtype=itype)
+                out_graphs.create_dataset('nodes2', (nEventToSave,), dtype=itype)
+                out_graphs['nodes1'][...] = out_jets_node1
+                out_graphs['nodes2'][...] = out_jets_node2
 
                 if args.debug: print("  done")
 
             with h5py.File(outFileName, 'r', libver='latest', swmr=True) as outFile:
-                print(("  created %s (%d/%d)" % (outFileName, iOutFile, args.nfiles)), end='')
-                print("  keys=", list(outFile['event'].keys()), end='')
-                print("  shape=", outFile['event']['eta'].shape)
+                print("  created %s %dth file" % (outFileName, iOutFile), end='')
+                print("  keys=", list(outFile['jets'].keys()), end='')
+                print("  shape=", outFile['jets/eta'].shape)
 
         print("%d/%d" % (nEventProcessed, nEventTotal), end="\r")
 
