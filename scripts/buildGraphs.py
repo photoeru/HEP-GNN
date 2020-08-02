@@ -161,7 +161,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
     src_jets_feats = [tree["Jet"][featName].array() for featName in featNames]
 
     ## Analyze events in this file
-    nEventPassed = nEvent0 ## FIXME: to be changed to cound number of events after cuts
+    nEventPassed = len(src_weights) ## FIXME: to be changed to cound number of events after cuts
 
     jets_node1, jets_node2 = buildGraph(src_jets_eta, src_jets_phi)
     if args.debug:
@@ -169,8 +169,8 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
         print("           eta:", src_jets_eta[0])
         print("           phi:", src_jets_phi[0])
 
-    begin, end = 0, min(nEventToGo, nEvent0)
-    while begin < nEvent0:
+    begin, end = 0, min(nEventToGo, nEventPassed)
+    while begin < nEventPassed:
         ### First check to prepare output array
         if nEventToGo == nEventOutFile: ## Initializing output file
             ## Build placeholder for the output
@@ -195,11 +195,11 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
         out_jets_node1 = np.concatenate([out_jets_node1, np.array([list(x) for x in jets_node1[begin:end]], dtype=itype)])
         out_jets_node2 = np.concatenate([out_jets_node2, np.array([list(x) for x in jets_node2[begin:end]], dtype=itype)])
 
-        begin, end = end, min(nEventToGo, nEvent0)
+        begin, end = end, min(nEventToGo, nEventPassed)
 
         if nEventToGo == 0 or nEventProcessed == nEventTotal: ## Flush output and continue
             nEventToGo = nEventOutFile
-            end = min(begin+nEventToGo, nEvent0)
+            end = min(begin+nEventToGo, nEventPassed)
 
             iOutFile = len(outFileNames)+1
             outFileName = outPrefix + (("_%d" % iOutFile) if args.split else "") + ".h5"
@@ -209,7 +209,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
             chunkSize = min(args.chunk, out_weights.shape[0])
             with h5py.File(outFileName, 'w', libver='latest', swmr=True) as outFile:
                 nEventToSave = len(out_weights)
-                out = outFile.create_group('jets')
+                out = outFile.create_group('event')
 
                 out.create_dataset('weights', data=out_weights, chunks=(chunkSize,), dtype='f4')
 
@@ -232,8 +232,8 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
 
             with h5py.File(outFileName, 'r', libver='latest', swmr=True) as outFile:
                 print(("  created %s (%d/%d)" % (outFileName, iOutFile, args.nfiles)), end='')
-                print("  keys=", list(outFile.keys()), end='')
-                print("  shape=", outFile['jets']['eta'].shape)
+                print("  keys=", list(outFile['event'].keys()), end='')
+                print("  shape=", outFile['event']['eta'].shape)
 
         print("%d/%d" % (nEventProcessed, nEventTotal), end="\r")
 
