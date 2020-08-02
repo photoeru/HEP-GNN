@@ -168,6 +168,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
                                   src_jets_pt, src_jets_eta, src_jets_btag)
 
     nEventPassed = len(selEvent) ## FIXME: to be changed to cound number of events after cuts
+    src_weights = src_weights[selEvent]
     src_jets_pt = src_jets_pt[selEvent]
     src_jets_eta = src_jets_eta[selEvent]
     src_jets_phi = src_jets_phi[selEvent]
@@ -245,7 +246,6 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
                 print("  created %s %dth file" % (outFileName, iOutFile), end='')
                 print("  keys=", list(outFile['jets'].keys()), end='')
                 print("  shape=", outFile['jets/eta'].shape)
-
         print("%d/%d" % (nEventProcessed, nEventTotal), end="\r")
 
 print("done %d/%d" % (nEventProcessed, nEventTotal))
