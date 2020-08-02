@@ -88,24 +88,23 @@ else:
     nEventOutFile = min(nEventTotal, args.nevent)
 print("@@@ Total %d events to process, store into %d files (%d events per file)" % (nEventTotal, args.nfiles, nEventOutFile))
 
-## Define variables to save
-jetVarNames = ["Jet.BTag"]
-nVars = len(jetVarNames)
-
-@numba.njit(nogil=True)#,parallel=True)
+@numba.njit(nogil=True, fastmath=True)
 def buildGraph(jetss_eta, jetss_phi):
+    prange = numba.prange
     maxDR2 = 1.2*1.2 ## maximum deltaR value to connect two jets
 
-    graphs = []
+    nodes1, nodes2= [[0]], [[0]]
+    nodes1.pop()
+    nodes2.pop()
     nEvent = len(jetss_eta)
     for ievt in range(nEvent):
         jets_eta = jetss_eta[ievt]
         jets_phi = jetss_phi[ievt]
         nJet = len(jets_eta)
 
-        g = []
-        for i in numba.prange(nJet):
-            for j in numba.prange(i):
+        inodes1, inodes2 = [], []
+        for i in prange(nJet):
+            for j in prange(i):
                 dEta = jets_eta[i]-jets_eta[j]
                 dPhi = jets_phi[i]-jets_phi[j]
                 ## Move dPhi to [-pi,pi] range
@@ -114,11 +113,28 @@ def buildGraph(jetss_eta, jetss_phi):
                 ## Compute deltaR^2 and ask it is inside of our ball
                 dR2 = dEta*dEta + dPhi*dPhi
                 if dR2 > maxDR2: continue 
-                g.append([i,j])
-                #g.append([j,i])
-        graphs.append(g)
+                inodes1.append(i)
+                inodes2.append(j)
+        nodes1.append(inodes1+inodes2)
+        nodes2.append(inodes2+inodes1)
 
-    return graphs
+    return nodes1, nodes2
+
+@numba.jit(nogil=True, fastmath=True)
+def selectBaselineCuts(fjetss_pt, fjetss_eta, fjetss_mass,
+                       jetss_pt, jetss_eta, jetss_btag):
+    prange = numba.prange
+
+    cut_minFJetSumMass = 500 # GeV
+    cut_minNBJets = 1
+    cut_minHT = 1500 ## GeV
+    cut_minNJet = 4
+
+    fatjet_pt_min = 30*units.GeV
+    jet_pt_min = 30*units.GeV
+    jet_eta_max = 2.4
+
+    return True
 
 print("@@@ Start processing...")
 
@@ -135,32 +151,41 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
 
     ## Load objects
     weights = np.ones(nEvent) if weightName else tree[weightName]
-    jetss_p4 = [tree["Jet"][x].array() for x in ("Jet.PT", "Jet.Eta", "Jet.Phi", "Jet.Mass")]
-    jetss_feats = [tree["Jet"][x].array() for x in jetVarNames]
+    jetss_eta = tree["Jet"]["Jet.Eta"].array()
+    jetss_phi = tree["Jet"]["Jet.Phi"].array()
+    featNames = ("Jet.PT", "Jet.Mass", "Jet.BTag")
+    nFeats = len(featNames)
+    jetss_feats = [tree["Jet"][x].array() for x in featNames]
 
     nEventPassed = nEvent ## FIXME: to be changed to cound number of events after cuts
 
-    edges = buildGraph(jetss_p4[1], jetss_p4[2])
+    nodes1, nodes2 = buildGraph(jetss_eta, jetss_phi)
     if args.debug:
-        print("@@@ Debug: First graphs built:", edges[0])
-        print("           eta:", jetss_p4[1][0])
-        print("           phi:", jetss_p4[2][0])
+        print("@@@ Debug: First graphs built:", nodes1[0], nodes2[0])
+        print("           eta:", jetss_eta[0])
+        print("           phi:", jetss_phi[0])
 
     outFileName = args.output+'/'+srcFileName.rsplit('/',1)[-1].rsplit('.',1)[-1]+'.h5'
     fout = h5py.File(outFileName, mode='w', libver='latest')
+
     dtype = h5py.special_dtype(vlen=np.dtype('float64'))
     itype = h5py.special_dtype(vlen=np.dtype('uint32'))
-    out = fout.create_group('graph')
-    out_pos  = out.create_group('pos')
-    out_feat = out.create_group('feat')
-    out_edge = out.create_group('edge')
 
-    out_pos.create_dataset('pos', (nEventPassed,), dtype=dtype)
-    out_pos['pos'][...] = jets_eta_phi
-    out_pos.create_dataset('feat', (nEventPassed,), dtype=dtype)
-    out_pos['feat'][...] = jets_features
-    out_pos.create_dataset('edge', (nEventPassed,), dtype=itype)
-    out_pos['edge'][...] = edges
+    out = fout.create_group('jets')
+
+    out.create_dataset('eta', (nEventPassed,), dtype=dtype)
+    out.create_dataset('phi', (nEventPassed,), dtype=dtype)
+    out['eta'][...] = np.array([list(x) for x in jetss_eta], dtype=dtype)
+    out['phi'][...] = np.array([list(x) for x in jetss_phi], dtype=dtype)
+    for i, x in enumerate(featNames):
+        shortName = x.replace('Jet.', '')
+        out.create_dataset(shortName, (nEventPassed,), dtype=dtype)
+        out[shortName][...] = np.array([list(y) for y in jetss_feats[i]], dtype=dtype)
+
+    out.create_dataset('nodes1', (nEventPassed,), dtype=itype)
+    out.create_dataset('nodes2', (nEventPassed,), dtype=itype)
+    out['nodes1'][...] = np.array([list(x) for x in nodes1], dtype=itype)
+    out['nodes2'][...] = np.array([list(x) for x in nodes2], dtype=itype)
 
     fout.close()
 
