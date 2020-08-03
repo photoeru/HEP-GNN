@@ -101,7 +101,7 @@ def buildGraph(jetss_pt, jetss_eta, jetss_phi):
                 elif dPhi < -math.pi: dPhi += 2*math.pi
                 ## Compute deltaR^2 and ask it is inside of our ball
                 dR2 = dEta*dEta + dPhi*dPhi
-                if dR2 > maxDR2: continue 
+                if dR2 > maxDR2: continue
                 inodes1.append(i)
                 inodes2.append(j)
         nodes1.append(inodes1+inodes2)
@@ -112,15 +112,13 @@ def buildGraph(jetss_pt, jetss_eta, jetss_phi):
 @numba.njit(nogil=True, fastmath=True, parallel=True)
 def selectBaselineCuts(src_fjets_pt, src_fjets_eta, src_fjets_mass,
                        src_jets_pt, src_jets_eta, src_jets_btag):
-    cut_minNBJets = 1
-    cut_minNJet = 4
-
     nEvent = int(len(src_fjets_pt))
     selEvents = []
 
     prange = numba.prange
     for ievt in prange(nEvent):
         selJets = (src_jets_pt[ievt] > 30) & (np.fabs(src_jets_eta[ievt]) < 2.4)
+        if len(selJets) < 4: continue ## require nJets >= 4
         ht = (src_jets_pt[ievt][selJets]).sum()
         if ht < 1500: continue ## require HT >= 1500
 
@@ -167,7 +165,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
     selEvent = selectBaselineCuts(src_fjets_pt, src_fjets_eta, src_fjets_mass,
                                   src_jets_pt, src_jets_eta, src_jets_btag)
 
-    nEventPassed = len(selEvent) ## FIXME: to be changed to cound number of events after cuts
+    nEventPassed = len(selEvent)
     src_weights = src_weights[selEvent]
     src_jets_pt = src_jets_pt[selEvent]
     src_jets_eta = src_jets_eta[selEvent]
@@ -176,9 +174,12 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
     ## Build graphs
     jets_node1, jets_node2 = buildGraph(src_jets_pt, src_jets_eta, src_jets_phi)
     if args.debug:
-        print("@@@ Debug: First graphs built:", jets_node1[0], jets_node2[0])
-        print("           eta:", src_jets_eta[0])
-        print("           phi:", src_jets_phi[0])
+        if len(jets_node1) > 0:
+            print("@@@ Debug: First graphs built:", jets_node1[0], jets_node2[0])
+            print("           eta:", src_jets_eta[0])
+            print("           phi:", src_jets_phi[0])
+        else:
+            print("@@@ Debug: Graphs in the first input file is empty...")
 
     begin, end = 0, min(nEventToGo, nEventPassed)
     while begin < nEventPassed:
@@ -198,13 +199,23 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
         nEventProcessed += (end-begin)
 
         out_weights = np.concatenate([out_weights, src_weights[begin:end]])
-        out_jets_eta = np.concatenate([out_jets_eta, np.array([list(x) for x in src_jets_eta[begin:end]], dtype=dtype)])
-        out_jets_phi = np.concatenate([out_jets_phi, np.array([list(x) for x in src_jets_phi[begin:end]], dtype=dtype)])
-        for i in range(nFeats):
-            out_jets_feats[i] = np.concatenate([out_jets_feats[i], 
-                                                np.array([list(x) for x in src_jets_feats[i][begin:end]], dtype=dtype)])
-        out_jets_node1 = np.concatenate([out_jets_node1, np.array([list(x) for x in jets_node1[begin:end]], dtype=itype)])
-        out_jets_node2 = np.concatenate([out_jets_node2, np.array([list(x) for x in jets_node2[begin:end]], dtype=itype)])
+        if (end-begin) <= 1: ## Exceptional case: np.array mistakes output shape to be (1,N) of float type but we need (1,) of list type
+            out_jets_eta = np.concatenate([out_jets_eta, np.array([[src_jets_eta[begin]],[]], dtype=dtype)])[:-1]
+            out_jets_phi = np.concatenate([out_jets_phi, np.array([[src_jets_phi[begin]],[]], dtype=dtype)])[:-1]
+            for i in range(nFeats):
+                out_jets_feats[i] = np.concatenate([out_jets_feats[i],
+                                                    np.array([[src_jets_feats[i][begin]],[]], dtype=dtype)])[:-1]
+            out_jets_node1 = np.concatenate([out_jets_node1, np.array([[jets_node1[begin]],[]], dtype=itype)])[:-1]
+            out_jets_node2 = np.concatenate([out_jets_node2, np.array([[jets_node2[begin]],[]], dtype=itype)])[:-1]
+
+        else:
+            out_jets_eta = np.concatenate([out_jets_eta, np.array([list(x) for x in src_jets_eta[begin:end]], dtype=dtype)])
+            out_jets_phi = np.concatenate([out_jets_phi, np.array([list(x) for x in src_jets_phi[begin:end]], dtype=dtype)])
+            for i in range(nFeats):
+                out_jets_feats[i] = np.concatenate([out_jets_feats[i],
+                                                    np.array([list(x) for x in src_jets_feats[i][begin:end]], dtype=dtype)])
+            out_jets_node1 = np.concatenate([out_jets_node1, np.array([list(x) for x in jets_node1[begin:end]], dtype=itype)])
+            out_jets_node2 = np.concatenate([out_jets_node2, np.array([list(x) for x in jets_node2[begin:end]], dtype=itype)])
 
         begin, end = end, min(nEventToGo, nEventPassed)
 
