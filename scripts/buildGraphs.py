@@ -182,7 +182,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
             print("@@@ Debug: Graphs in the first input file is empty...")
 
     begin, end = 0, min(nEventToGo, nEventPassed)
-    while begin < nEventPassed:
+    while True:
         ### First check to prepare output array
         if nEventToGo == nEventOutFile: ## Initializing output file
             ## Build placeholder for the output
@@ -196,7 +196,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
 
         ## Do the processing
         nEventToGo -= (end-begin)
-        nEventProcessed += (end-begin)
+        nEventProcessed += nEvent0#(end-begin)
 
         out_weights = np.concatenate([out_weights, src_weights[begin:end]])
         if (end-begin) <= 1: ## Exceptional case: np.array mistakes output shape to be (1,N) of float type but we need (1,) of list type
@@ -257,6 +257,9 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
                 print("  created %s %dth file" % (outFileName, iOutFile), end='')
                 print("  keys=", list(outFile['jets'].keys()), end='')
                 print("  shape=", outFile['jets/eta'].shape)
+
+        if begin >= nEventPassed: break
+
         print("%d/%d" % (nEventProcessed, nEventTotal), end="\r")
 
 print("done %d/%d" % (nEventProcessed, nEventTotal))
