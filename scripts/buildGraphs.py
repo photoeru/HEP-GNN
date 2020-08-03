@@ -144,6 +144,7 @@ nFeats = len(featNames)
 dtype = h5py.special_dtype(vlen=np.dtype('float64'))
 itype = h5py.special_dtype(vlen=np.dtype('uint32'))
 
+nSrcFiles = len(srcFileNames)
 for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
     if args.debug: print("@@@ Open file", srcFileName)
     ## Open data files
@@ -182,7 +183,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
             print("@@@ Debug: Graphs in the first input file is empty...")
 
     begin, end = 0, min(nEventToGo, nEventPassed)
-    while True:
+    while begin < nEventPassed: ## Inner loop to store events to splited output files
         ### First check to prepare output array
         if nEventToGo == nEventOutFile: ## Initializing output file
             ## Build placeholder for the output
@@ -196,7 +197,6 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
 
         ## Do the processing
         nEventToGo -= (end-begin)
-        nEventProcessed += nEvent0#(end-begin)
 
         out_weights = np.concatenate([out_weights, src_weights[begin:end]])
         if (end-begin) <= 1: ## Exceptional case: np.array mistakes output shape to be (1,N) of float type but we need (1,) of list type
@@ -219,7 +219,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
 
         begin, end = end, min(nEventToGo, nEventPassed)
 
-        if nEventToGo == 0 or nEventProcessed == nEventTotal: ## Flush output and continue
+        if nEventToGo == 0 or (iSrcFile == nSrcFiles-1 and nEventToGo <= nEventOutFile): ## Flush output and continue
             nEventToGo = nEventOutFile
             end = min(begin+nEventToGo, nEventPassed)
 
@@ -258,9 +258,8 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
                 print("  keys=", list(outFile['jets'].keys()), end='')
                 print("  shape=", outFile['jets/eta'].shape)
 
-        if begin >= nEventPassed: break
-
-        print("%d/%d" % (nEventProcessed, nEventTotal), end="\r")
+    nEventProcessed += nEvent0
+    print("%d/%d" % (nEventProcessed, nEventTotal), end="\r")
 
 print("done %d/%d" % (nEventProcessed, nEventTotal))
 
