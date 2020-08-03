@@ -54,15 +54,15 @@ class TimeHistory():#tf.keras.callbacks.Callback):
 sys.path.append("../scripts")
 
 sys.path.append("../python")
-from DelphesDataset import DelphesDataset as MyDataset
+from HEPGNNDataset import HEPGNNDataset as MyDataset
 
 myDataset = MyDataset()
-basedir = os.environ['SAMPLEDIR'] if 'SAMPLEDIR' in  os.environ else "/store/hep/users/jhgoh/Delphes/20200530_1/32PU"
-myDataset.addSample("RPV_1400", basedir+"/RPV/Gluino1400GeV/*/*.root", weight=0.013/330599)
-#myDataset.addSample("QCD_HT700to1000" , basedir+"/QCD/HT700to1000/*/*.root", weight=???)
-myDataset.addSample("QCD_HT1000to1500", basedir+"/QCDBkg/HT1000to1500/*/*.root", weight=1094./15466225)
-myDataset.addSample("QCD_HT1500to2000", basedir+"/QCDBkg/HT1500to2000/*/*.root", weight=99.16/3368613)
-myDataset.addSample("QCD_HT2000toInf" , basedir+"/QCDBkg/HT2000toInf/*/*.root", weight=20.25/3250016)
+basedir = os.environ['SAMPLEDIR'] if 'SAMPLEDIR' in  os.environ else "../data"
+myDataset.addSample("RPV_1400", basedir+"/RPV/Gluino1400GeV/*.h5", weight=0.013/330599*2)
+#myDataset.addSample("QCD_HT700to1000" , basedir+"/QCD/HT700to1000/*/*.h5", weight=???)
+myDataset.addSample("QCD_HT1000to1500", basedir+"/QCDBkg/HT1000to1500/*.h5", weight=1094./15466225*2)
+myDataset.addSample("QCD_HT1500to2000", basedir+"/QCDBkg/HT1500to2000/*.h5", weight=99.16/3368613*2)
+myDataset.addSample("QCD_HT2000toInf" , basedir+"/QCDBkg/HT2000toInf/*.h5", weight=20.25/3250016*2)
 myDataset.setProcessLabel("RPV_1400", 1)
 myDataset.setProcessLabel("QCD_HT1000to1500", 0) ## This is not necessary because the default is 0
 myDataset.setProcessLabel("QCD_HT1500to2000", 0) ## This is not necessary because the default is 0
@@ -75,8 +75,8 @@ torch.manual_seed(123456)
 trnDataset, valDataset, testDataset = torch.utils.data.random_split(myDataset, lengths)
 torch.manual_seed(torch.initial_seed())
 
-#kwargs = {'num_workers':min(4, nthreads), 'pin_memory':False}
-kwargs = {'pin_memory':True}
+kwargs = {'num_workers':min(4, nthreads), 'pin_memory':False}
+#kwargs = {'pin_memory':True}
 #if torch.cuda.is_available():
 #    kwargs['pin_memory'] = True
 
