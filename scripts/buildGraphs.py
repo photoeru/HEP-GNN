@@ -171,6 +171,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
     src_jets_pt = src_jets_pt[selEvent]
     src_jets_eta = src_jets_eta[selEvent]
     src_jets_phi = src_jets_phi[selEvent]
+    for i in range(nFeats): src_jets_feats[i] = src_jets_feats[i][selEvent]
 
     ## Build graphs
     jets_node1, jets_node2 = buildGraph(src_jets_pt, src_jets_eta, src_jets_phi)
@@ -190,7 +191,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
             out_weights = np.array([], dtype=np.dtype('float64'))
             out_jets_eta = np.array([], dtype=dtype)
             out_jets_phi = np.array([], dtype=dtype)
-            out_jets_feats = [np.array([], dtype=dtype) for featName in featNames]
+            out_jets_feats = [np.array([], dtype=dtype) for i in range(nFeats)]
             out_jets_node1 = np.array([], dtype=itype)
             out_jets_node2 = np.array([], dtype=itype)
         ###
