@@ -146,7 +146,7 @@ try:
                 optm.zero_grad()
 
             trn_loss += l.item()
-            trn_acc += accuracy_score(label.to('cpu'), np.where(pred.to('cpu') > 0.5, 1, 0))
+            trn_acc += accuracy_score(label.to('cpu'), np.where(pred.to('cpu') > 0.5, 1, 0), sample_weight=weight.to('cpu'))
 
         trn_loss /= len(trnLoader)
         trn_acc  /= len(trnLoader)
@@ -166,7 +166,7 @@ try:
             l = crit(pred.view(-1), label)
 
             val_loss += l.item()
-            val_acc += accuracy_score(label.to('cpu'), np.where(pred.to('cpu') > 0.5, 1, 0))
+            val_acc += accuracy_score(label.to('cpu'), np.where(pred.to('cpu') > 0.5, 1, 0), sample_weight=weight.to('cpu'))
         val_loss /= len(valLoader)
         val_acc  /= len(valLoader)
 
