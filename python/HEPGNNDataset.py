@@ -138,7 +138,7 @@ class HEPGNNDataset(PyGDataset):
         for fileIdx in self.sampleInfo['fileIdx']:
             label = self.sampleInfo.loc[self.sampleInfo.fileIdx==fileIdx, 'label']
             for l in label: ## this loop runs only once, by construction.
-                self.rescaleList[fileIdx] *= (1./sumWByLabel[l])
+                self.rescaleList[fileIdx] *= (sumEByLabel[maxSumELabel]/sumWByLabel[l])
                 #print("@@@ Scale sample label_%d(sumE=%g,sumW=%g)->label_%d, sf=%f" % (l, sumEByLabel[l], sumWByLabel[l], maxSumELabel, sf))
                 break ## this loop runs only once, by construction. this break is just for a confirmation
 
