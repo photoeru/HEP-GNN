@@ -111,13 +111,18 @@ class HEPGNNDataset(PyGDataset):
 
         print("")
 
+        ## Compute cumulative sums of nEvent, to be used for the file indexing
+        self.maxEventsList = np.concatenate(([0.], np.cumsum(self.sampleInfo['nEvent'])))
+
         ## Compute sum of weights for each label categories
         sumWByLabel = {}
         sumEByLabel = {}
         for label in self.sampleInfo['label']:
             label = int(label)
-            sumWByLabel[label] = self.sampleInfo[self.sampleInfo.label==label]['weight'].sum()
-            sumEByLabel[label] = self.sampleInfo[self.sampleInfo.label==label]['nEvent'].sum()
+            w = self.sampleInfo[self.sampleInfo.label==label]['weight']
+            e = self.sampleInfo[self.sampleInfo.label==label]['nEvents']
+            sumWByLabel[label] = (w*e).sum()
+            sumEByLabel[label] = e.sum()
         ## Find overall rescale for the data imbalancing problem - fit to the category with maximum entries
         maxSumELabel = max(sumEByLabel, key=lambda key: sumEByLabel[key])
         maxWMaxSumELabel = self.sampleInfo[self.sampleInfo.label==maxSumELabel]['weight'].max()
@@ -129,18 +134,12 @@ class HEPGNNDataset(PyGDataset):
         #print('  max weight of this label=', maxWMaxSumELabel*sumEByLabel[maxSumELabel]/sumWByLabel[maxSumELabel])
         #print('  mean weight of this label=', meanWMaxSumELabel*sumEByLabel[maxSumELabel]/sumWByLabel[maxSumELabel])
 
-        ## Compute cumulative sums of nEvent, to be used for the file indexing
-        self.maxEventsList = np.concatenate(([0.], np.cumsum(self.sampleInfo['nEvent'])))
-
         ## Find rescale factors - make average weight to be 1 for each cat in the training step
         for fileIdx in self.sampleInfo['fileIdx']:
             label = self.sampleInfo.loc[self.sampleInfo.fileIdx==fileIdx, 'label']
             for l in label: ## this loop runs only once, by construction.
-                sf = sumWByLabel[maxSumELabel]/maxWMaxSumELabel/sumWByLabel[l]
-                self.rescaleList[fileIdx] *= sf
-                print("@@@ Scale sample label_%d(sumE=%g,sumW=%g)->label_%d, sf=%f" % (l, sumEByLabel[l], sumWByLabel[l], maxSumELabel, sf))
-
-        #print(self.weightList)
-        #print(self.rescaleList)
+                self.rescaleList[fileIdx] *= (sumEByLabel[maxSumELabel]/sumWByLabel[l])
+                #print("@@@ Scale sample label_%d(sumE=%g,sumW=%g)->label_%d, sf=%f" % (l, sumEByLabel[l], sumWByLabel[l], maxSumELabel, sf))
+                break ## this loop runs only once, by construction. this break is just for a confirmation
 
         self.isLoaded = True

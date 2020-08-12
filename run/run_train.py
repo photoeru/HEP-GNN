@@ -81,7 +81,6 @@ kwargs = {'num_workers':min(4, nthreads), 'pin_memory':False}
 #    kwargs['pin_memory'] = True
 
 trnLoader = DataLoader(trnDataset, batch_size=args.batch, shuffle=args.shuffle, **kwargs)
-#valLoader = DataLoader(valDataset, batch_size=args.batch, shuffle=args.shuffle, **kwargs)
 valLoader = DataLoader(valDataset, batch_size=args.batch, shuffle=False, **kwargs)
 
 ## Build model
