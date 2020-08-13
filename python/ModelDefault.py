@@ -17,8 +17,8 @@ class PointConvNet(nn.Module):
         
     def forward(self, data, batch=None):
         x, pos, batch, edge_index = data.x, data.pos, data.batch, data.edge_index
-        pos_x, pos_y = torch.cos(pos[:,0]).view(-1,1), torch.sin(pos[:,0]).view(-1,1)
-        pos_z = pos[:,1].view(-1,1)
+        pos_x, pos_y = torch.cos(pos[:,1]).view(-1,1), torch.sin(pos[:,1]).view(-1,1)
+        pos_z = pos[:,0].view(-1,1)
         pos = torch.cat([pos_x, pos_y, pos_z], dim=-1)
         x = self.conv(x, pos, edge_index)
         return x, pos, batch
