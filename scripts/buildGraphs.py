@@ -123,7 +123,7 @@ def selectBaselineCuts(src_fjets_pt, src_fjets_eta, src_fjets_mass,
         if ht < 1500: continue ## require HT >= 1500
 
         selBJets = (src_jets_btag[ievt][selJets] > 0.5)
-        if sum(selBJets) < 1: continue ## require nBJets >= 1
+        if selBJets.sum() < 1: continue ## require nBJets >= 1
 
         selFjets = (src_fjets_pt[ievt] > 30)
         sumFjetsMass = (src_fjets_mass[ievt][selFjets]).sum()
