@@ -33,8 +33,8 @@ config = yaml.load(open(args.config).read(), Loader=yaml.FullLoader)
 if args.device >= 0: torch.cuda.set_device(args.device)
 
 if not os.path.exists(args.outdir): os.makedirs(args.outdir)
-modelFile = os.path.join(args.outdir, 'model.pkl')
-weightFile = os.path.join(args.outdir, 'weight.pkl')
+modelFile = os.path.join(args.outdir, 'model.pth')
+weightFile = os.path.join(args.outdir, 'weight.pth')
 predFile = os.path.join(args.outdir, 'predict.npy')
 trainingFile = os.path.join(args.outdir, 'train.csv')
 resourceByCPFile = os.path.join(args.outdir, 'resourceByCP.csv')
@@ -113,7 +113,7 @@ with open(args.outdir+'/summary.txt', 'w') as fout:
 
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score
-bestModel, bestAcc = {}, -1
+bestModel, bestLoss = {}, 1e9
 try:
     timeHistory = TimeHistory()
     timeHistory.on_train_begin()
@@ -166,10 +166,11 @@ try:
         val_loss /= len(valLoader)
         val_acc  /= len(valLoader)
 
-        if bestAcc < val_acc:
-            bestModel = model.state_dict()
-            bestAcc = val_acc
+        if bestLoss < val_loss:
+            bestModel = model.to('cpu').state_dict()
+            bestLoss = val_loss
             torch.save(bestModel, weightFile)
+            model.to(device)
 
         timeHistory.on_epoch_end()
         history['loss'].append(trn_loss)
