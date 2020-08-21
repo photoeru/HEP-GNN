@@ -118,7 +118,7 @@ def selectBaselineCuts(src_fjets_pt, src_fjets_eta, src_fjets_mass,
     prange = numba.prange
     for ievt in prange(nEvent):
         selJets = (src_jets_pt[ievt] > 30) & (np.fabs(src_jets_eta[ievt]) < 2.4)
-        if len(selJets) < 4: continue ## require nJets >= 4
+        if sum(selJets) < 4: continue ## require nJets >= 4
         ht = (src_jets_pt[ievt][selJets]).sum()
         if ht < 1500: continue ## require HT >= 1500
 
