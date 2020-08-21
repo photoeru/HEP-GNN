@@ -3,7 +3,7 @@ import numpy as np
 import argparse
 import sys, os
 import subprocess
-import csv
+import csv, yaml
 import math
 
 import torch
@@ -25,14 +25,16 @@ parser.add_argument('--batchPerStep', action='store', type=int, default=1, help=
 parser.add_argument('--shuffle', action='store', type=bool, default=True, help='Shuffle batches for each epochs')
 parser.add_argument('--optimizer', action='store', choices=('sgd', 'adam', 'radam', 'ranger'), default='adam', help='optimizer to run')
 parser.add_argument('--device', action='store', type=int, default=-1, help='device name')
+parser.add_argument('-c', '--config', action='store', type=str, default='config.yaml', help='Configration file with sample information')
 
 args = parser.parse_args()
+config = yaml.load(open(args.config).read(), Loader=yaml.FullLoader)
 
 if args.device >= 0: torch.cuda.set_device(args.device)
 
 if not os.path.exists(args.outdir): os.makedirs(args.outdir)
-modelFile = os.path.join(args.outdir, 'model.pkl')
-weightFile = os.path.join(args.outdir, 'weight.pkl')
+modelFile = os.path.join(args.outdir, 'model.pth')
+weightFile = os.path.join(args.outdir, 'weight.pth')
 predFile = os.path.join(args.outdir, 'predict.npy')
 trainingFile = os.path.join(args.outdir, 'train.csv')
 resourceByCPFile = os.path.join(args.outdir, 'resourceByCP.csv')
@@ -57,25 +59,20 @@ sys.path.append("../python")
 from HEPGNNDataset import HEPGNNDataset as MyDataset
 
 myDataset = MyDataset()
-basedir = os.environ['SAMPLEDIR'] if 'SAMPLEDIR' in  os.environ else "../data"
-myDataset.addSample("RPV_1400", basedir+"/RPV/Gluino1400GeV/*.h5", weight=0.013/330599*2)
-#myDataset.addSample("QCD_HT700to1000" , basedir+"/QCD/HT700to1000/*/*.h5", weight=???)
-myDataset.addSample("QCD_HT1000to1500", basedir+"/QCDBkg/HT1000to1500/*.h5", weight=1094./15466225*2)
-myDataset.addSample("QCD_HT1500to2000", basedir+"/QCDBkg/HT1500to2000/*.h5", weight=99.16/3368613*2)
-myDataset.addSample("QCD_HT2000toInf" , basedir+"/QCDBkg/HT2000toInf/*.h5", weight=20.25/3250016*2)
-myDataset.setProcessLabel("RPV_1400", 1)
-myDataset.setProcessLabel("QCD_HT1000to1500", 0) ## This is not necessary because the default is 0
-myDataset.setProcessLabel("QCD_HT1500to2000", 0) ## This is not necessary because the default is 0
-myDataset.setProcessLabel("QCD_HT2000toInf", 0) ## This is not necessary because the default is 0
+for sampleInfo in config['samples']:
+    if 'ignore' in sampleInfo and sampleInfo['ignore']: continue
+    name = sampleInfo['name']
+    myDataset.addSample(name, sampleInfo['path'], weight=sampleInfo['xsec']/sampleInfo['ngen'])
+    myDataset.setProcessLabel(name, sampleInfo['label'])
 myDataset.initialize()
 
 lengths = [int(0.6*len(myDataset)), int(0.2*len(myDataset))]
 lengths.append(len(myDataset)-sum(lengths))
-torch.manual_seed(123456)
+torch.manual_seed(config['training']['randomSeed1'])
 trnDataset, valDataset, testDataset = torch.utils.data.random_split(myDataset, lengths)
 torch.manual_seed(torch.initial_seed())
 
-kwargs = {'num_workers':min(4, nthreads), 'pin_memory':False}
+kwargs = {'num_workers':min(config['training']['nDataLoaders'], nthreads), 'pin_memory':False}
 #kwargs = {'pin_memory':True}
 #if torch.cuda.is_available():
 #    kwargs['pin_memory'] = True
@@ -116,7 +113,7 @@ with open(args.outdir+'/summary.txt', 'w') as fout:
 
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score
-bestModel, bestAcc = {}, -1
+bestModel, bestLoss = {}, 1e9
 try:
     timeHistory = TimeHistory()
     timeHistory.on_train_begin()
@@ -169,10 +166,11 @@ try:
         val_loss /= len(valLoader)
         val_acc  /= len(valLoader)
 
-        if bestAcc < val_acc:
-            bestModel = model.state_dict()
-            bestAcc = val_acc
+        if bestLoss < val_loss:
+            bestModel = model.to('cpu').state_dict()
+            bestLoss = val_loss
             torch.save(bestModel, weightFile)
+            model.to(device)
 
         timeHistory.on_epoch_end()
         history['loss'].append(trn_loss)

@@ -118,7 +118,7 @@ def selectBaselineCuts(src_fjets_pt, src_fjets_eta, src_fjets_mass,
     prange = numba.prange
     for ievt in prange(nEvent):
         selJets = (src_jets_pt[ievt] > 30) & (np.fabs(src_jets_eta[ievt]) < 2.4)
-        if sum(selJets) < 4: continue ## require nJets >= 4
+        if selJets.sum() < 4: continue ## require nJets >= 4
         ht = (src_jets_pt[ievt][selJets]).sum()
         if ht < 1500: continue ## require HT >= 1500
 
@@ -162,7 +162,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
     src_fjets_eta  = tree["FatJet"]["FatJet.Eta"].array()
     src_fjets_mass = tree["FatJet"]["FatJet.Mass"].array()
     src_jets_pt   = tree["Jet"]["Jet.PT"].array()
-    src_jets_btag = tree["Jet"]["Jet.Mass"].array()
+    src_jets_btag = tree["Jet"]["Jet.BTag"].array()
     selEvent = selectBaselineCuts(src_fjets_pt, src_fjets_eta, src_fjets_mass,
                                   src_jets_pt, src_jets_eta, src_jets_btag)
 

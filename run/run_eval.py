@@ -3,7 +3,7 @@ import numpy as np
 import argparse
 import sys, os
 import subprocess
-import csv
+import csv, yaml
 import math
 
 import torch
@@ -19,8 +19,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch', action='store', type=int, default=256, help='Batch size')
 parser.add_argument('-d', '--input', action='store', type=str, required=True, help='directory with pretrained model parameters')
 parser.add_argument('--device', action='store', type=int, default=-1, help='device name')
+parser.add_argument('-c', '--config', action='store', type=str, default='config.yaml', help='Configration file with sample information')
+parser.add_argument('--lumi', action='store', type=float, default=138, help='Reference luminosity in fb-1')
 
 args = parser.parse_args()
+config = yaml.load(open(args.config).read(), Loader=yaml.FullLoader)
+lumiVal = args.lumi
 
 predFile = args.input+'/prediction.csv'
 import pandas as pd
@@ -31,36 +35,26 @@ print("Load data", end='')
 from HEPGNNDataset import HEPGNNDataset as MyDataset
 
 myDataset = MyDataset()
-basedir = os.environ['SAMPLEDIR'] if 'SAMPLEDIR' in  os.environ else "../data"
-myDataset.addSample("RPV_1400", basedir+"/RPV/Gluino1400GeV/*.h5", weight=0.013/330599*2)
-#myDataset.addSample("QCD_HT700to1000" , basedir+"/QCD/HT700to1000/*/*.h5", weight=???)
-myDataset.addSample("QCD_HT1000to1500", basedir+"/QCDBkg/HT1000to1500/*.h5", weight=1094./15466225*2)
-myDataset.addSample("QCD_HT1500to2000", basedir+"/QCDBkg/HT1500to2000/*.h5", weight=99.16/3368613*2)
-myDataset.addSample("QCD_HT2000toInf" , basedir+"/QCDBkg/HT2000toInf/*.h5", weight=20.25/3250016*2)
-myDataset.setProcessLabel("RPV_1400", 1)
-myDataset.setProcessLabel("QCD_HT1000to1500", 0) ## This is not necessary because the default is 0
-myDataset.setProcessLabel("QCD_HT1500to2000", 0) ## This is not necessary because the default is 0
-myDataset.setProcessLabel("QCD_HT2000toInf", 0) ## This is not necessary because the default is 0
+for sampleInfo in config['samples']:
+    if 'ignore' in sampleInfo and sampleInfo['ignore']: continue
+    name = sampleInfo['name']
+    myDataset.addSample(name, sampleInfo['path'], weight=sampleInfo['xsec']/sampleInfo['ngen'])
+    myDataset.setProcessLabel(name, sampleInfo['label'])
 myDataset.initialize()
 
 lengths = [int(0.6*len(myDataset)), int(0.2*len(myDataset))]
 lengths.append(len(myDataset)-sum(lengths))
-torch.manual_seed(123456)
+torch.manual_seed(config['training']['randomSeed1'])
 trnDataset, valDataset, testDataset = torch.utils.data.random_split(myDataset, lengths)
 torch.manual_seed(torch.initial_seed())
 
-kwargs = {'num_workers':min(4, nthreads)}
+kwargs = {'num_workers':min(config['training']['nDataLoaders'], nthreads)}
 
 testLoader = DataLoader(testDataset, batch_size=args.batch, shuffle=False, **kwargs)
 
 print("Load model", end='')
-if os.path.exists(args.input+'/model.pkl'):
-    print("Load saved model from", (args.input+'/model.pkl'))
-    model = torch.load(args.input+'/model.pkl')
-else:
-    print("Load the model", args.model)
-    from ModelDefault import ModelDefault as MyModel
-    model = MyModel()
+print("Load saved model from", (args.input+'/model.pth'))
+model = torch.load(args.input+'/model.pth')
 
 device = 'cpu'
 if torch.cuda.is_available():
@@ -68,7 +62,8 @@ if torch.cuda.is_available():
   device = 'cuda'
 print('done')
 
-model.load_state_dict(torch.load(args.input+'/weight.pkl'))
+model.load_state_dict(torch.load(args.input+'/weight.pth', map_location='cpu'))
+model.to(device)
 print('modify model', end='')
 model.fc.add_module('output', torch.nn.Sigmoid())
 model.eval()
@@ -81,16 +76,16 @@ for i, batch in enumerate(tqdm(testLoader)):
     batch = batch.to(device)
     pos, feats = batch.pos, batch.x
     label = batch.y.float()
-    weight = batch.weight*batch.rescale
+    ww = batch.weight*batch.rescale
 
     pred = model(batch)
 
     labels.extend([x.item() for x in label])
     preds.extend([x.item() for x in pred.view(-1)])
-    weights.extend([x.item() for x in weight.view(-1)])
-    scaledWeights.extend([x.item() for x in (batch.weight*batch.rescale).view(-1)])
+    weights.extend([x.item() for x in batch.weight.view(-1)])
+    scaledWeights.extend([x.item() for x in ww.view(-1)])
 df = pd.DataFrame({'label':labels, 'prediction':preds,
-                 'weight':weights, 'scaledWeight':scaledWeights})
+                   'weight':weights, 'scaledWeight':scaledWeights})
 df.to_csv(predFile, index=False)
 
 from sklearn.metrics import roc_curve, roc_auc_score
@@ -103,10 +98,10 @@ print(df.keys())
 df_bkg = df[df.label==0]
 df_sig = df[df.label==1]
 
-hbkg1 = df_bkg['prediction'].plot(kind='hist', histtype='step', weights=df_bkg['weight'], bins=50, alpha=0.7, color='red', label='QCD')
-hsig1 = df_sig['prediction'].plot(kind='hist', histtype='step', weights=df_sig['weight'], bins=50, alpha=0.7, color='blue', label='RPV')
+hbkg1 = df_bkg['prediction'].plot(kind='hist', histtype='step', weights=1000*lumiVal*df_bkg['weight'], bins=50, alpha=0.7, color='red', label='QCD')
+hsig1 = df_sig['prediction'].plot(kind='hist', histtype='step', weights=1000*lumiVal*df_sig['weight'], bins=50, alpha=0.7, color='blue', label='RPV')
 plt.yscale('log')
-plt.ylabel('Events/(100)/(fb-1)')
+plt.ylabel('Events/(%.1f)/(fb-1)' % lumiVal)
 plt.legend()
 plt.show()
 

@@ -33,13 +33,14 @@ class HEPGNNDataset(PyGDataset):
         phis = self.phiList[fileIdx][idx]
         nodes1 = self.nodes1List[fileIdx][idx]
         nodes2 = self.nodes2List[fileIdx][idx]
+        procIdxs = self.procList[fileIdx][idx]
 
         feats = torch.Tensor(np.stack([x[idx] for x in self.featsList[fileIdx]]).T)
         poses = torch.Tensor(np.stack([etas, phis]).T)
         graph = torch.tensor(np.stack([nodes1, nodes2]).astype(dtype=np.dtype('int64')))
 
         data = PyGData(x = feats, pos = poses, edge_index = graph, y=label,
-                       weight=weight, rescale=rescale)
+                       weight=weight, rescale=rescale, procIdxs=procIdxs)
         return data
 
     def addSample(self, procName, fNamePattern, weight=1, logger=None):
@@ -65,10 +66,12 @@ class HEPGNNDataset(PyGDataset):
         if self.isLoaded: return
 
         print(self.sampleInfo)
+        procNames = list(self.sampleInfo['procName'].unique())
 
         self.labelList = []
         self.weightList = []
         self.rescaleList = []
+        self.procList = []
         self.nodes1List = []
         self.nodes2List = []
         self.etaList = []
@@ -92,6 +95,8 @@ class HEPGNNDataset(PyGDataset):
             weights = torch.ones(nEvent, dtype=torch.float32, requires_grad=False)*weight
             self.weightList.append(weights)
             self.rescaleList.append(torch.ones(nEvent, dtype=torch.float32, requires_grad=False))
+            procIdx = procNames.index(self.sampleInfo['procName'][i])
+            self.procList.append(torch.ones(nEvent, dtype=torch.int32, requires_grad=False)*procIdx)
 
             ## Load particles
             jets_eta = data['jets/eta']
@@ -120,7 +125,7 @@ class HEPGNNDataset(PyGDataset):
         for label in self.sampleInfo['label']:
             label = int(label)
             w = self.sampleInfo[self.sampleInfo.label==label]['weight']
-            e = self.sampleInfo[self.sampleInfo.label==label]['nEvents']
+            e = self.sampleInfo[self.sampleInfo.label==label]['nEvent']
             sumWByLabel[label] = (w*e).sum()
             sumEByLabel[label] = e.sum()
         ## Find overall rescale for the data imbalancing problem - fit to the category with maximum entries
