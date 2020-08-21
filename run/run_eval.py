@@ -3,7 +3,7 @@ import numpy as np
 import argparse
 import sys, os
 import subprocess
-import csv
+import csv, yaml
 import math
 
 import torch
@@ -19,8 +19,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--batch', action='store', type=int, default=256, help='Batch size')
 parser.add_argument('-d', '--input', action='store', type=str, required=True, help='directory with pretrained model parameters')
 parser.add_argument('--device', action='store', type=int, default=-1, help='device name')
+parser.add_argument('-c', '--config', action='store', type=str, default='config.yaml', help='Configration file with sample information')
 
 args = parser.parse_args()
+config = yaml.load(open(args.config).read(), Loader=yaml.FullLoader)
 
 predFile = args.input+'/prediction.csv'
 import pandas as pd
@@ -31,16 +33,11 @@ print("Load data", end='')
 from HEPGNNDataset import HEPGNNDataset as MyDataset
 
 myDataset = MyDataset()
-basedir = os.environ['SAMPLEDIR'] if 'SAMPLEDIR' in  os.environ else "../data"
-myDataset.addSample("RPV_1400", basedir+"/RPV/Gluino1400GeV/*.h5", weight=0.013/330599*2)
-#myDataset.addSample("QCD_HT700to1000" , basedir+"/QCD/HT700to1000/*/*.h5", weight=???)
-myDataset.addSample("QCD_HT1000to1500", basedir+"/QCDBkg/HT1000to1500/*.h5", weight=1094./15466225*2)
-myDataset.addSample("QCD_HT1500to2000", basedir+"/QCDBkg/HT1500to2000/*.h5", weight=99.16/3368613*2)
-myDataset.addSample("QCD_HT2000toInf" , basedir+"/QCDBkg/HT2000toInf/*.h5", weight=20.25/3250016*2)
-myDataset.setProcessLabel("RPV_1400", 1)
-myDataset.setProcessLabel("QCD_HT1000to1500", 0) ## This is not necessary because the default is 0
-myDataset.setProcessLabel("QCD_HT1500to2000", 0) ## This is not necessary because the default is 0
-myDataset.setProcessLabel("QCD_HT2000toInf", 0) ## This is not necessary because the default is 0
+for sampleInfo in config['samples']:
+    if 'ignore' in sampleInfo and sampleInfo['ignore']: continue
+    name = sampleInfo['name']
+    myDataset.addSample(name, sampleInfo['path'], weight=sampleInfo['xsec']/sampleInfo['ngen'])
+    myDataset.setProcessLabel(name, sampleInfo['label'])
 myDataset.initialize()
 
 lengths = [int(0.6*len(myDataset)), int(0.2*len(myDataset))]
