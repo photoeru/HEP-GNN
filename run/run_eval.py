@@ -20,9 +20,11 @@ parser.add_argument('--batch', action='store', type=int, default=256, help='Batc
 parser.add_argument('-d', '--input', action='store', type=str, required=True, help='directory with pretrained model parameters')
 parser.add_argument('--device', action='store', type=int, default=-1, help='device name')
 parser.add_argument('-c', '--config', action='store', type=str, default='config.yaml', help='Configration file with sample information')
+parser.add_argument('--lumi', action='store', type=float, default=138, help='Reference luminosity in fb-1')
 
 args = parser.parse_args()
 config = yaml.load(open(args.config).read(), Loader=yaml.FullLoader)
+lumiVal = args.lumi
 
 predFile = args.input+'/prediction.csv'
 import pandas as pd
@@ -78,16 +80,16 @@ for i, batch in enumerate(tqdm(testLoader)):
     batch = batch.to(device)
     pos, feats = batch.pos, batch.x
     label = batch.y.float()
-    weight = batch.weight*batch.rescale
+    ww = batch.weight*batch.rescale
 
     pred = model(batch)
 
     labels.extend([x.item() for x in label])
     preds.extend([x.item() for x in pred.view(-1)])
-    weights.extend([x.item() for x in weight.view(-1)])
-    scaledWeights.extend([x.item() for x in (batch.weight*batch.rescale).view(-1)])
+    weights.extend([x.item() for x in batch.weight.view(-1)])
+    scaledWeights.extend([x.item() for x in ww.view(-1)])
 df = pd.DataFrame({'label':labels, 'prediction':preds,
-                 'weight':weights, 'scaledWeight':scaledWeights})
+                   'weight':weights, 'scaledWeight':scaledWeights})
 df.to_csv(predFile, index=False)
 
 from sklearn.metrics import roc_curve, roc_auc_score
@@ -100,10 +102,10 @@ print(df.keys())
 df_bkg = df[df.label==0]
 df_sig = df[df.label==1]
 
-hbkg1 = df_bkg['prediction'].plot(kind='hist', histtype='step', weights=df_bkg['weight'], bins=50, alpha=0.7, color='red', label='QCD')
-hsig1 = df_sig['prediction'].plot(kind='hist', histtype='step', weights=df_sig['weight'], bins=50, alpha=0.7, color='blue', label='RPV')
+hbkg1 = df_bkg['prediction'].plot(kind='hist', histtype='step', weights=1000*lumiVal*df_bkg['weight'], bins=50, alpha=0.7, color='red', label='QCD')
+hsig1 = df_sig['prediction'].plot(kind='hist', histtype='step', weights=1000*lumiVal*df_sig['weight'], bins=50, alpha=0.7, color='blue', label='RPV')
 plt.yscale('log')
-plt.ylabel('Events/(100)/(fb-1)')
+plt.ylabel('Events/(%.1f)/(fb-1)' % lumiVal)
 plt.legend()
 plt.show()
 
