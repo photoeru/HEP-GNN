@@ -120,7 +120,7 @@ class HEPGNNDataset(PyGDataset):
         for label in self.sampleInfo['label']:
             label = int(label)
             w = self.sampleInfo[self.sampleInfo.label==label]['weight']
-            e = self.sampleInfo[self.sampleInfo.label==label]['nEvents']
+            e = self.sampleInfo[self.sampleInfo.label==label]['nEvent']
             sumWByLabel[label] = (w*e).sum()
             sumEByLabel[label] = e.sum()
         ## Find overall rescale for the data imbalancing problem - fit to the category with maximum entries

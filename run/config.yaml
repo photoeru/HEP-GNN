@@ -28,5 +28,5 @@ samples:
     ngen: 3250016
 training:
     randomSeed1: 123456
-    nDataLoaders: 4
+    nDataLoaders: 16
 

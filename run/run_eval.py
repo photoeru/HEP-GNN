@@ -42,11 +42,11 @@ myDataset.initialize()
 
 lengths = [int(0.6*len(myDataset)), int(0.2*len(myDataset))]
 lengths.append(len(myDataset)-sum(lengths))
-torch.manual_seed(123456)
+torch.manual_seed(config['training']['randomSeed1'])
 trnDataset, valDataset, testDataset = torch.utils.data.random_split(myDataset, lengths)
 torch.manual_seed(torch.initial_seed())
 
-kwargs = {'num_workers':min(4, nthreads)}
+kwargs = {'num_workers':min(config['training']['nDataLoaders'], nthreads)}
 
 testLoader = DataLoader(testDataset, batch_size=args.batch, shuffle=False, **kwargs)
 
