@@ -162,7 +162,7 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
     src_fjets_eta  = tree["FatJet"]["FatJet.Eta"].array()
     src_fjets_mass = tree["FatJet"]["FatJet.Mass"].array()
     src_jets_pt   = tree["Jet"]["Jet.PT"].array()
-    src_jets_btag = tree["Jet"]["Jet.Btag"].array()
+    src_jets_btag = tree["Jet"]["Jet.BTag"].array()
     selEvent = selectBaselineCuts(src_fjets_pt, src_fjets_eta, src_fjets_mass,
                                   src_jets_pt, src_jets_eta, src_jets_btag)
 
