@@ -15,6 +15,7 @@ class HEPGNNDataset(PyGDataset):
         self.isLoaded = False
         self.fNames = []
         self.sampleInfo = pd.DataFrame(columns=["procName", "fileName", "weight", "label", "fileIdx"])
+        self.procNames = []
 
     def len(self):
         return int(self.maxEventsList[-1])
@@ -33,17 +34,19 @@ class HEPGNNDataset(PyGDataset):
         phis = self.phiList[fileIdx][idx]
         nodes1 = self.nodes1List[fileIdx][idx]
         nodes2 = self.nodes2List[fileIdx][idx]
+        procIdxs = self.procIdxList[fileIdx][idx]
 
         feats = torch.Tensor(np.stack([x[idx] for x in self.featsList[fileIdx]]).T)
         poses = torch.Tensor(np.stack([etas, phis]).T)
         graph = torch.tensor(np.stack([nodes1, nodes2]).astype(dtype=np.dtype('int64')))
 
         data = PyGData(x = feats, pos = poses, edge_index = graph, y=label,
-                       weight=weight, rescale=rescale)
+                       weight=weight, rescale=rescale, procIdxs=procIdxs)
         return data
 
     def addSample(self, procName, fNamePattern, weight=1, logger=None):
         if logger: logger.update(annotation='Add sample %s <= %s' % (procName, fNames))
+        if procName not in self.procNames: self.procNames.append(procName)
         print(procName, fNamePattern)
 
         for fName in glob(fNamePattern):
@@ -74,6 +77,7 @@ class HEPGNNDataset(PyGDataset):
         self.etaList = []
         self.phiList = []
         self.featsList = []
+        self.procIdxList = []
 
         nFiles = len(self.sampleInfo)
         ## Load event contents
@@ -92,6 +96,8 @@ class HEPGNNDataset(PyGDataset):
             weights = torch.ones(nEvent, dtype=torch.float32, requires_grad=False)*weight
             self.weightList.append(weights)
             self.rescaleList.append(torch.ones(nEvent, dtype=torch.float32, requires_grad=False))
+            procIdx = self.procNames.index(self.sampleInfo['procName'][i])
+            self.procIdxList.append(torch.ones(nEvent, dtype=torch.int32, requires_grad=False)*procIdx)
 
             ## Load particles
             jets_eta = data['jets/eta']
