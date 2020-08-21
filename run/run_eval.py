@@ -53,13 +53,8 @@ kwargs = {'num_workers':min(config['training']['nDataLoaders'], nthreads)}
 testLoader = DataLoader(testDataset, batch_size=args.batch, shuffle=False, **kwargs)
 
 print("Load model", end='')
-if os.path.exists(args.input+'/model.pkl'):
-    print("Load saved model from", (args.input+'/model.pkl'))
-    model = torch.load(args.input+'/model.pkl')
-else:
-    print("Load the model", args.model)
-    from ModelDefault import ModelDefault as MyModel
-    model = MyModel()
+print("Load saved model from", (args.input+'/model.pth'))
+model = torch.load(args.input+'/model.pth')
 
 device = 'cpu'
 if torch.cuda.is_available():
@@ -67,7 +62,8 @@ if torch.cuda.is_available():
   device = 'cuda'
 print('done')
 
-model.load_state_dict(torch.load(args.input+'/weight.pkl'))
+model.load_state_dict(torch.load(args.input+'/weight.pth', map_location='cpu'))
+model.to(device)
 print('modify model', end='')
 model.fc.add_module('output', torch.nn.Sigmoid())
 model.eval()
