@@ -77,10 +77,10 @@ for x in args.input:
 nEventOutFile = min(nEventTotal, args.nevent) if args.split else nEventTotal
 print("@@@ Total %d events to process, store %d events per file" % (nEventTotal, nEventOutFile))
 
+maxDR2 = args.deltaR*args.deltaR ## maximum deltaR value to connect two jets
 @numba.njit(nogil=True, fastmath=True, parallel=True)
 def buildGraph(jetss_pt, jetss_eta, jetss_phi):
     prange = numba.prange
-    maxDR2 = args.deltaR*args.deltaR ## maximum deltaR value to connect two jets
 
     nodes1, nodes2 = [[0]], [[0]]
     nodes1.pop()
@@ -193,8 +193,8 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
             out_jets_eta = np.array([], dtype=dtype)
             out_jets_phi = np.array([], dtype=dtype)
             out_jets_feats = [np.array([], dtype=dtype) for i in range(nFeats)]
-            out_jets_node1 = np.ndarray((0,0), dtype=itype)
-            out_jets_node2 = np.ndarray((0,0), dtype=itype)
+            out_jets_node1 = np.ndarray((0,), dtype=itype)
+            out_jets_node2 = np.ndarray((0,), dtype=itype)
         ###
 
         ## Do the processing
