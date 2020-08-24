@@ -30,8 +30,6 @@ parser.add_argument('-c', '--config', action='store', type=str, default='config.
 args = parser.parse_args()
 config = yaml.load(open(args.config).read(), Loader=yaml.FullLoader)
 
-if args.device >= 0: torch.cuda.set_device(args.device)
-
 if not os.path.exists(args.outdir): os.makedirs(args.outdir)
 modelFile = os.path.join(args.outdir, 'model.pth')
 weightFile = os.path.join(args.outdir, 'weight.pth')
@@ -85,7 +83,8 @@ from ModelDefault import MyModel
 model = MyModel()
 torch.save(model, modelFile)
 device = 'cpu'
-if torch.cuda.is_available():
+if args.device >= 0 and torch.cuda.is_available():
+    torch.cuda.set_device(args.device)
     model = model.cuda()
     device = 'cuda'
 
@@ -113,7 +112,7 @@ with open(args.outdir+'/summary.txt', 'w') as fout:
 
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score
-bestModel, bestLoss = {}, 1e9
+bestWeight, bestLoss = {}, 1e9
 try:
     timeHistory = TimeHistory()
     timeHistory.on_train_begin()
@@ -166,10 +165,10 @@ try:
         val_loss /= len(valLoader)
         val_acc  /= len(valLoader)
 
-        if bestLoss < val_loss:
-            bestModel = model.to('cpu').state_dict()
+        if bestLoss > val_loss:
+            bestWeight = model.to('cpu').state_dict()
             bestLoss = val_loss
-            torch.save(bestModel, weightFile)
+            torch.save(bestWeight, weightFile)
             model.to(device)
 
         timeHistory.on_epoch_end()
