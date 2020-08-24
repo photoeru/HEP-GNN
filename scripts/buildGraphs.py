@@ -23,6 +23,7 @@ parser.add_argument('--compress', action='store', choices=('gzip', 'lzf', 'none'
 parser.add_argument('-s', '--split', action='store_true', default=False, help='split output file')
 parser.add_argument('-d', '--debug', action='store_true', default=False, help='debugging')
 parser.add_argument('--precision', action='store', type=int, choices=(8,16,32,64), default=32, help='Precision')
+parser.add_argument('--deltaR', action='store', type=float, default=1.2, help='maximum deltaR to build graphs')
 args = parser.parse_args()
 
 if not args.output.endswith('.h5'): outPrefix, outSuffix = args.output+'/data', '.h5'
@@ -79,7 +80,7 @@ print("@@@ Total %d events to process, store %d events per file" % (nEventTotal,
 @numba.njit(nogil=True, fastmath=True, parallel=True)
 def buildGraph(jetss_pt, jetss_eta, jetss_phi):
     prange = numba.prange
-    maxDR2 = 1.2*1.2 ## maximum deltaR value to connect two jets
+    maxDR2 = args.deltaR*args.deltaR ## maximum deltaR value to connect two jets
 
     nodes1, nodes2 = [[0]], [[0]]
     nodes1.pop()
