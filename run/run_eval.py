@@ -57,9 +57,10 @@ print("Load saved model from", (args.input+'/model.pth'))
 model = torch.load(args.input+'/model.pth')
 
 device = 'cpu'
-if torch.cuda.is_available():
-  model = model.cuda()
-  device = 'cuda'
+if args.device >= 0 and torch.cuda.is_available():
+    torch.cuda.set_device(args.device)
+    model = model.cuda()
+    device = 'cuda'
 print('done')
 
 model.load_state_dict(torch.load(args.input+'/weight.pth', map_location='cpu'))
