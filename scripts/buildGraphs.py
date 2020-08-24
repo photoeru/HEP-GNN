@@ -192,8 +192,8 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
             out_jets_eta = np.array([], dtype=dtype)
             out_jets_phi = np.array([], dtype=dtype)
             out_jets_feats = [np.array([], dtype=dtype) for i in range(nFeats)]
-            out_jets_node1 = np.array([], dtype=itype)
-            out_jets_node2 = np.array([], dtype=itype)
+            out_jets_node1 = np.ndarray((0,0), dtype=itype)
+            out_jets_node2 = np.ndarray((0,0), dtype=itype)
         ###
 
         ## Do the processing
