@@ -201,23 +201,14 @@ for iSrcFile, (nEvent0, srcFileName) in enumerate(zip(nEvent0s, srcFileNames)):
         nEventToGo -= (end-begin)
 
         out_weights = np.concatenate([out_weights, src_weights[begin:end]])
-        if (end-begin) <= 1: ## Exceptional case: np.array mistakes output shape to be (1,N) of float type but we need (1,) of list type
-            out_jets_eta = np.concatenate([out_jets_eta, np.array([[src_jets_eta[begin]],[]], dtype=dtype)])[:-1]
-            out_jets_phi = np.concatenate([out_jets_phi, np.array([[src_jets_phi[begin]],[]], dtype=dtype)])[:-1]
-            for i in range(nFeats):
-                out_jets_feats[i] = np.concatenate([out_jets_feats[i],
-                                                    np.array([[src_jets_feats[i][begin]],[]], dtype=dtype)])[:-1]
-            out_jets_node1 = np.concatenate([out_jets_node1, np.array([[jets_node1[begin]],[]], dtype=itype)])[:-1]
-            out_jets_node2 = np.concatenate([out_jets_node2, np.array([[jets_node2[begin]],[]], dtype=itype)])[:-1]
-
-        else:
-            out_jets_eta = np.concatenate([out_jets_eta, np.array([list(x) for x in src_jets_eta[begin:end]], dtype=dtype)])
-            out_jets_phi = np.concatenate([out_jets_phi, np.array([list(x) for x in src_jets_phi[begin:end]], dtype=dtype)])
-            for i in range(nFeats):
-                out_jets_feats[i] = np.concatenate([out_jets_feats[i],
-                                                    np.array([list(x) for x in src_jets_feats[i][begin:end]], dtype=dtype)])
-            out_jets_node1 = np.concatenate([out_jets_node1, np.array([list(x) for x in jets_node1[begin:end]], dtype=itype)])
-            out_jets_node2 = np.concatenate([out_jets_node2, np.array([list(x) for x in jets_node2[begin:end]], dtype=itype)])
+        ## Add dummy list and pop back - np.array mistakes output shape to be (1,N) of float type but we need (1,) of list type
+        out_jets_eta = np.concatenate([out_jets_eta, np.array([[src_jets_eta[begin:end]],[]], dtype=dtype)])[:-1]
+        out_jets_phi = np.concatenate([out_jets_phi, np.array([[src_jets_phi[begin:end]],[]], dtype=dtype)])[:-1]
+        for i in range(nFeats):
+            out_jets_feats[i] = np.concatenate([out_jets_feats[i],
+                                                np.array([[src_jets_feats[i][begin:end]],[]], dtype=dtype)])[:-1]
+        out_jets_node1 = np.concatenate([out_jets_node1, np.array([[jets_node1[begin:end]],[]], dtype=itype)])[:-1]
+        out_jets_node2 = np.concatenate([out_jets_node2, np.array([[jets_node2[begin:end]],[]], dtype=itype)])[:-1]
 
         begin, end = end, min(nEventToGo, nEventPassed)
 
