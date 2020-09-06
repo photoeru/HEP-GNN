@@ -161,10 +161,11 @@ class FileSplitOut:
     def addEvents(self, src_weights, src_jets_eta, src_jets_phi, src_jets_feats,
                         jets_node1, jets_node2):
         nSrcEvent = len(src_weights)
-        self.nOutEvent += nSrcEvent;
         begin = 0
         while begin < nSrcEvent:
-            end = begin+min(self.maxEvent, nSrcEvent)
+            end = min(nSrcEvent, begin+self.maxEvent-len(self.weights))
+            self.nOutEvent += (end-begin);
+            print("%d events processed..." % (self.nOutEvent), end='\r')
 
             self.weights = np.concatenate([self.weights, src_weights[begin:end]])
             self.jets_eta = self.join(self.jets_eta, src_jets_eta[begin:end])
