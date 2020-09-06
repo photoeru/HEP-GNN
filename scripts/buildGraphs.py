@@ -271,6 +271,6 @@ fileOuts.flush()
 
 print("@@@ Finished processing")
 print("    Number of input files   =", len(srcFileNames))
-print("    Number of input events  =", nEventsTotal)
+print("    Number of input events  =", nEventTotal)
 print("    Number of output files  =", fileOuts.nOutFile)
 print("    Number of output events =", fileOuts.nOutEvent)
