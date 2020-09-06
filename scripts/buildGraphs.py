@@ -151,10 +151,10 @@ class FileSplitOut:
 
     def initOutput(self):
         ## Build placeholder for the output
-        self.weights = np.array([], dtype=np.dtype('float64'))
-        self.jets_eta = np.array([], dtype=self.type_fa)
-        self.jets_phi = np.array([], dtype=self.type_fa)
-        self.jets_feats = [np.array([], dtype=self.type_fa) for _ in self.featNames]
+        self.weights = np.ndarray((0,), dtype=np.dtype('float64'))
+        self.jets_eta = np.ndarray((0,), dtype=self.type_fa)
+        self.jets_phi = np.ndarray((0,), dtype=self.type_fa)
+        self.jets_feats = [np.ndarray((0,), dtype=self.type_fa) for _ in self.featNames]
         self.jets_node1 = np.ndarray((0,), dtype=self.type_ia)
         self.jets_node2 = np.ndarray((0,), dtype=self.type_ia)
 
@@ -167,14 +167,14 @@ class FileSplitOut:
             end = begin+min(self.maxEvent, nSrcEvent)
 
             self.weights = np.concatenate([self.weights, src_weights[begin:end]])
-            self.jets_eta = self.append(self.jets_eta, src_jets_eta[begin:end])
-            self.jets_phi = self.append(self.jets_phi, src_jets_phi[begin:end])
+            self.jets_eta = self.join(self.jets_eta, src_jets_eta[begin:end])
+            self.jets_phi = self.join(self.jets_phi, src_jets_phi[begin:end])
             for i in range(nFeats):
-                self.jets_feats[i] = self.append(self.jets_feats[i], src_jets_feats[i][begin:end])
-            self.jets_node1 = self.append(self.jets_node1, jets_node1[begin:end])
-            self.jets_node2 = self.append(self.jets_node2, jets_node2[begin:end])
+                self.jets_feats[i] = self.join(self.jets_feats[i], src_jets_feats[i][begin:end])
+            self.jets_node1 = self.join(self.jets_node1, jets_node1[begin:end])
+            self.jets_node2 = self.join(self.jets_node2, jets_node2[begin:end])
 
-            self.flush()
+            if len(self.weights) == self.maxEvent: self.flush()
             begin = end
 
     def flush(self):
@@ -191,10 +191,8 @@ class FileSplitOut:
             out_events.create_dataset('weights', data=self.weights, chunks=(self.chunkSize,), dtype='f4')
 
             out_jets = outFile.create_group('jets')
-            out_jets.create_dataset('eta', (nEventToSave,), dtype=self.type_fa)
-            out_jets.create_dataset('phi', (nEventToSave,), dtype=self.type_fa)
-            out_jets['eta'][...] = self.jets_eta
-            out_jets['phi'][...] = self.jets_phi
+            out_jets.create_dataset('eta', data=self.jets_eta)
+            out_jets.create_dataset('phi', data=self.jets_phi)
 
             for i, featName in enumerate(featNames):
                 shortName = featName.replace('Jet.', '')
@@ -202,10 +200,8 @@ class FileSplitOut:
                 out_jets[shortName][...] = self.jets_feats[i]
 
             out_graphs = outFile.create_group('graphs')
-            out_graphs.create_dataset('nodes1', (nEventToSave,), dtype=self.type_ia)
-            out_graphs.create_dataset('nodes2', (nEventToSave,), dtype=self.type_ia)
-            out_graphs['nodes1'][...] = self.jets_node1
-            out_graphs['nodes2'][...] = self.jets_node2
+            out_graphs.create_dataset('nodes1', data=self.jets_node1)
+            out_graphs.create_dataset('nodes2', data=self.jets_node2)
 
         self.nOutFile += 1
 
@@ -214,12 +210,19 @@ class FileSplitOut:
                 print("  created %s %dth file" % (fName, self.nOutFile), end='')
                 print("  keys=", list(outFile['jets'].keys()), end='')
                 print("  shape=", outFile['jets/eta'].shape)
+                if len(outFile['events/weights']) > 0:
+                    print("    weight[0]=", outFile['events/weights'][0])
+                    print("    eta[0]   =", outFile['jets/eta'][0])
+                    print("    phi[0]   =", outFile['jets/phi'][0])
+                    print("    nodes1[0]=", outFile['graphs/nodes1'][0])
+                    print("    nodes2[0]=", outFile['graphs/nodes2'][0])
 
-    def append(self, target, src):
+    def join(self, target, src):
         if len(src) == 0: return target
 
-        arr = np.array([x for x in src], dtype=target.dtype)
-        arr = arr.reshape(-1)
+        ## Add dummy ndarray front pop it, unless numpy build array with wrong dimension.
+        arr = [np.array([0])] + [x for x in src]
+        arr = np.array(arr, dtype=target.dtype)[1:]
         return np.concatenate([target, arr])
     
 print("@@@ Start processing...")
@@ -263,6 +266,8 @@ for nEvent0, srcFileName in zip(nEvent0s, srcFileNames):
             print("           phi:", src_jets_phi[0])
         else:
             print("@@@ Debug: Graphs in the first input file is empty...")
+    jets_node1 = [np.array(x, dtype=np.uint32) for x in jets_node1]
+    jets_node2 = [np.array(x, dtype=np.uint32) for x in jets_node2]
 
     ## Save output
     fileOuts.addEvents(src_weights, src_jets_eta, src_jets_phi, src_jets_feats, jets_node1, jets_node2)
