@@ -163,7 +163,7 @@ class FileSplitOut:
         nSrcEvent = len(src_weights)
         begin = 0
         while begin < nSrcEvent:
-            end = begin+min(nSrcEvent, self.maxEvent-len(self.weights))
+            end = min(nSrcEvent, begin+self.maxEvent-len(self.weights))
             self.nOutEvent += (end-begin);
             print("%d events processed..." % (self.nOutEvent), end='\r')
 
