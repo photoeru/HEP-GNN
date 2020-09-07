@@ -26,6 +26,11 @@ samples:
     path: ../data/QCDBkg/HT2000toInf/*.h5
     xsec: 25.24
     ngen: 3250016
+  - name: ttbar               ## ttbar root file path : /store/hep/users/qoqorm/CMS_TTbar_80000/rootfile/PU   &&  file numbaer 1048, 1049, 1050, 1051, 1052 no use (no ['Delphes']) 
+    label: 0
+    path: ../data/ttbar/*.h5    
+    xsec: 831.76
+    ngen: 4204449
 training:
     randomSeed1: 123456
     nDataLoaders: 16
